@@ -2,13 +2,11 @@
  * High-Performance JWT Token Generator for DevWeb
  * Optimized for high TPS (500+ TPS) with minimal resource usage
  */
+const crypto = require("crypto");
+
 class JWTTokenGenerator {
   constructor() {
     this.supportedAlgorithms = ["PS256", "SHA256"];
-    // Pre-allocate buffers for better performance
-    this.encoder = new TextEncoder();
-    this.buffer = new ArrayBuffer(1024);
-    this.uint8Array = new Uint8Array(this.buffer);
   }
 
   /**
@@ -17,9 +15,9 @@ class JWTTokenGenerator {
    * @param {Object} payload - JWT payload with claims
    * @param {string} signing_key - The signing key
    * @param {string} private_key - The private key
-   * @returns {Promise<string>} The generated JWT token
+   * @returns {string} The generated JWT token
    */
-  async generateToken(headers, payload, signing_key, private_key) {
+  generateToken(headers, payload, signing_key, private_key) {
     try {
       // Quick validation
       if (!headers.alg || !this.supportedAlgorithms.includes(headers.alg)) {
@@ -32,7 +30,7 @@ class JWTTokenGenerator {
       // Create final header with required fields
       const finalHeaders = { ...headers, typ: "JWT" };
 
-      // Encode header and payload (optimized for speed)
+      // Encode header and payload
       const encodedHeader = this.base64UrlEncode(JSON.stringify(finalHeaders));
       const encodedPayload = this.base64UrlEncode(JSON.stringify(payload));
       const signingInput = `${encodedHeader}.${encodedPayload}`;
@@ -40,94 +38,64 @@ class JWTTokenGenerator {
       // Generate signature based on algorithm
       let signature;
       if (finalHeaders.alg === "PS256") {
-        signature = await this.signPS256(signingInput, private_key);
+        signature = this.signPS256(signingInput, private_key);
       } else {
-        signature = await this.signSHA256(signingInput, private_key);
+        signature = this.signSHA256(signingInput, private_key);
       }
 
       // Return complete token
       return `${encodedHeader}.${encodedPayload}.${signature}`;
     } catch (error) {
-      load.log(`JWT Generation Error: ${error.message}`, load.LogLevel.error);
+      console.error(`JWT Generation Error: ${error.message}`);
       throw error;
     }
   }
 
   /**
-   * Sign data using PS256 algorithm (optimized)
+   * Sign data using PS256 algorithm
    * @param {string} data - The data to sign
    * @param {string} private_key - The private key
-   * @returns {Promise<string>} The signature
+   * @returns {string} The signature
    */
-  async signPS256(data, private_key) {
+  signPS256(data, private_key) {
     try {
-      // Use pre-allocated buffer for better performance
-      const dataBuffer = this.encoder.encode(data);
-
-      const signature = await window.crypto.subtle.sign(
-        {
-          name: "RSA-PSS",
-          saltLength: 32,
-        },
-        private_key,
-        dataBuffer
-      );
-
-      return this.base64UrlEncode(signature);
+      const sign = crypto.createSign("RSA-SHA256");
+      sign.update(data);
+      return this.base64UrlEncode(sign.sign(private_key, "base64"));
     } catch (error) {
-      load.log(`PS256 Signing Error: ${error.message}`, load.LogLevel.error);
+      console.error(`PS256 Signing Error: ${error.message}`);
       throw error;
     }
   }
 
   /**
-   * Sign data using SHA256 algorithm (optimized)
+   * Sign data using SHA256 algorithm
    * @param {string} data - The data to sign
    * @param {string} private_key - The private key
-   * @returns {Promise<string>} The signature
+   * @returns {string} The signature
    */
-  async signSHA256(data, private_key) {
+  signSHA256(data, private_key) {
     try {
-      // Use pre-allocated buffer for better performance
-      const dataBuffer = this.encoder.encode(data);
-
-      const hash = await window.crypto.subtle.digest("SHA-256", dataBuffer);
-      return this.base64UrlEncode(hash);
+      const hash = crypto.createHash("sha256");
+      hash.update(data);
+      return this.base64UrlEncode(hash.digest("base64"));
     } catch (error) {
-      load.log(`SHA256 Signing Error: ${error.message}`, load.LogLevel.error);
+      console.error(`SHA256 Signing Error: ${error.message}`);
       throw error;
     }
   }
 
   /**
-   * Base64Url encode data (optimized)
-   * @param {string|ArrayBuffer} data - The data to encode
-   * @returns {string} The encoded data
+   * Base64Url encode data
+   * @param {string} str - The string to encode
+   * @returns {string} The encoded string
    */
-  base64UrlEncode(data) {
-    try {
-      if (typeof data === "string") {
-        return btoa(data)
-          .replace(/\+/g, "-")
-          .replace(/\//g, "_")
-          .replace(/=/g, "");
-      } else {
-        // Use pre-allocated buffer for ArrayBuffer
-        const bytes = new Uint8Array(data);
-        let binary = "";
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        return btoa(binary)
-          .replace(/\+/g, "-")
-          .replace(/\//g, "_")
-          .replace(/=/g, "");
-      }
-    } catch (error) {
-      load.log(`Base64 Encoding Error: ${error.message}`, load.LogLevel.error);
-      throw error;
-    }
+  base64UrlEncode(str) {
+    return Buffer.from(str)
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
   }
 }
 
